@@ -1,0 +1,397 @@
+/*Test schema*/
+do $teststructure$
+declare
+    in_curruser text default current_user;
+    in_newschema text default 'testppm';
+    in_sql text;
+begin
+
+    if not exists(select 1 from information_schema.schemata s where s.schema_name = in_newschema) then
+        in_sql := 'create schema if not exists ' || in_newschema || ';'
+        	|| E'\n' || 'alter schema ' || in_newschema ||' owner to ' || in_curruser || ';';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'activitytype') then
+    	in_sql := 'create table ' || in_newschema || '.activitytype ('
+        	|| E'\n' || 'activitytypeid int not null'
+            || E'\n' || ',name text not null'
+            || E'\n' || ',sysname text not null'
+            || E'\n' || ',constraint pk_activitytype primary key(activitytypeid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'activity') then
+    	in_sql := 'create table ' || in_newschema || '.activity ('
+        	|| E'\n' || 'activityid int not null'
+            || E'\n' || ',activitytypeid int not null'
+            || E'\n' || ',code text not null'
+            || E'\n' || ',name text not null'
+            || E'\n' || ',parentid int null'
+            || E'\n' || ',constraint pk_activity primary key(activityid)'
+            || E'\n' || ',constraint fk_activity_activitytype foreign key(activitytypeid) references ' || in_newschema || '.activitytype(activitytypeid)'
+            || E'\n' || ',constraint fk_activity_parent foreign key(parentid) references ' || in_newschema || '.activity(activityid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'area') then
+    	in_sql := 'create table ' || in_newschema || '.area ('
+        	|| E'\n' || 'areaid int not null'
+            || E'\n' || ',name text not null'
+            || E'\n' || ',constraint pk_area primary key(areaid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'program') then
+    	in_sql := 'create table ' || in_newschema || '.program ('
+        	|| E'\n' || 'programid int not null'
+            || E'\n' || ',indexnum int null'
+            || E'\n' || ',yearstart int null'
+            || E'\n' || ',yearfinish int null'
+            || E'\n' || ',constraint pk_program primary key(programid)'
+            || E'\n' || ',constraint fk_program_activity foreign key(programid) references ' || in_newschema || '.activity(activityid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'subprogram') then
+    	in_sql := 'create table ' || in_newschema || '.subprogram ('
+        	|| E'\n' || 'subprogramid int not null'
+            || E'\n' || ',indexnum int null'
+            || E'\n' || ',constraint pk_subprogram primary key(subprogramid)'
+            || E'\n' || ',constraint fk_subprogram_activity foreign key(subprogramid) references ' || in_newschema || '.activity(activityid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'project') then
+    	in_sql := 'create table ' || in_newschema || '.project ('
+        	|| E'\n' || 'projectid int not null'
+            || E'\n' || ',targetdescr text null'
+            || E'\n' || ',constraint pk_project primary key(projectid)'
+            || E'\n' || ',constraint fk_project_activity foreign key(projectid) references ' || in_newschema || '.activity(activityid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'contract') then
+    	in_sql := 'create table ' || in_newschema || '.contract ('
+        	|| E'\n' || 'contractid int not null'
+            || E'\n' || ',areaid int null'
+            || E'\n' || ',constraint pk_contract primary key(contractid)'
+            || E'\n' || ',constraint fk_contract_activity foreign key(contractid) references ' || in_newschema || '.activity(activityid)'
+            || E'\n' || ',constraint fk_contract_area foreign key(areaid) references ' || in_newschema || '.area(areaid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+    if not exists(select 1 from information_schema.tables t where t.table_schema = in_newschema and t.table_name = 'point') then
+    	in_sql := 'create table ' || in_newschema || '.point ('
+        	|| E'\n' || 'pointid int not null'
+            || E'\n' || ',plandate date not null'
+            || E'\n' || ',factdate date null'
+            || E'\n' || ',constraint pk_point primary key(pointid)'
+            || E'\n' || ',constraint fk_point_activity foreign key(pointid) references ' || in_newschema || '.activity(activityid)'
+        || E'\n' || ') with (oids = false);';
+        execute in_sql;
+    end if;
+
+
+exception when others then
+	raise notice 'test structure SQLSTATE: %', sqlstate;
+    raise;
+end
+$teststructure$;
+
+/*Test data*/
+do $testdata$
+declare
+	in_current_search_path text default current_setting('search_path');
+	in_new_search_path text;
+    in_newschema text default 'testppm';
+    in_sql text;
+begin
+	select string_agg(s.v, ',')
+    from (
+        select in_newschema as v
+        union all
+        select d.v
+        from regexp_split_to_table(in_current_search_path, '\s*,\s*') d(v)
+        where d.v <> in_newschema
+    ) s
+    into in_new_search_path;
+
+    in_sql := 'set search_path to ' || in_new_search_path || ';';
+    execute in_sql;
+
+    insert into activitytype(
+    	activitytypeid
+        ,name
+        ,sysname
+    )
+    select d.*
+    from (
+    	values(1,'Программа','Program')
+        ,(2,'Подпрограмма','SubProgram')
+        ,(3,'Проект','Project')
+        ,(4,'Контракт','Contract')
+        ,(5,'КТ','Point')
+    ) d(activitytypeid, name, sysname)
+    where not exists(
+    	select 1 from activitytype t
+        where t.activitytypeid = d.activitytypeid
+    );
+
+    insert into area(
+    	areaid
+        ,name
+    )
+    select d.*
+    from (
+    	values(1, 'Москва')
+        ,(2, 'Московская область')
+        ,(3, 'Санкт-Петербург')
+        ,(4, 'Ленинградская область')
+    ) d(areaid, name)
+    where not exists(
+    	select 1 from area t
+        where t.areaid = d.areaid
+    );
+
+    insert into activity (
+    	activityid
+        ,activitytypeid
+        ,code
+        ,name
+        ,parentid
+    )
+    select d.*
+    from (
+    	values(1,1,'900-001','Программа - 2012',null::int)
+        ,(2,1,'900-002','Программа - 2013',null::int)
+        ,(3,1,'900-003','Программа - 2014',null::int)
+    ) d(activityid, activitytypeid, code, name, parentid)
+    where not exists(
+    	select 1 from activity t
+        where t.activityid = d.activityid
+    );
+
+    insert into program (
+    	programid
+        ,indexnum
+        ,yearstart
+        ,yearfinish
+    )
+    select d.*
+    from (
+    	values(1,1,2012,2013)
+        ,(2,2,2013,2014)
+        ,(3,3,2014,2015)
+    ) d(programid, indexnum, yearstart, yearfinish)
+    where not exists(
+    	select 1 from program t
+        where t.programid = d.programid
+    );
+
+    insert into activity (
+    	activityid
+        ,activitytypeid
+        ,code
+        ,name
+        ,parentid
+    )
+    select d.*
+    from (
+    	values(4,2,'800-001','Подпрограмма - 2012.1',1)
+        ,(5,2,'800-002','Подпрограмма - 2012.2',1)
+        ,(6,2,'800-003','Подпрограмма - 2012.3',1)
+        ,(7,2,'800-004','Подпрограмма - 2013.1',2)
+        ,(8,2,'800-005','Подпрограмма - 2013.2',2)
+        ,(9,2,'800-006','Подпрограмма - 2013.3',2)
+        ,(10,2,'800-004','Подпрограмма - 2014.1',3)
+        ,(11,2,'800-005','Подпрограмма - 2014.2',3)
+        ,(12,2,'800-006','Подпрограмма - 2014.3',3)
+    ) d(activityid, activitytypeid, code, name, parentid)
+    where not exists(
+    	select 1 from activity t
+        where t.activityid = d.activityid
+    );
+
+    insert into subprogram (
+    	subprogramid
+        ,indexnum
+    )
+    select d.*
+    from (
+    	values(4,1)
+        ,(5,2)
+        ,(6,3)
+        ,(7,1)
+        ,(8,2)
+        ,(9,3)
+        ,(10,1)
+        ,(11,2)
+        ,(12,3)
+    ) d(subprogramid, indexnum)
+    where not exists(
+    	select 1 from subprogram t
+        where t.subprogramid = d.subprogramid
+    );
+
+
+    insert into activity (
+        activityid
+        ,activitytypeid
+        ,code
+        ,name
+        ,parentid
+    )
+    select d.*
+    from (
+        select row_number() over(order by pg.programid desc) + lid.last_id as activityid
+            ,3 as activitytypeid
+            ,to_char(600000 + row_number() over(order by pg.programid, spg.subprogramid), 'FM000-000') as code
+            ,'Проект - ' || coalesce(pg.yearstart::text || '.', '') || coalesce(spg.indexnum::text, 'id_' || spg.subprogramid::text) || '.' || pj.id::text as name
+            ,spg.subprogramid as parentid
+        from subprogram spg
+        join activity sp on sp.activityid = spg.subprogramid
+        join program pg on pg.programid = sp.parentid
+        join (select max(aa.activityid) as last_id from activity aa where aa.activitytypeid < 3) lid on true
+        join (
+            values(1),(2),(3),(4)
+        ) pj(id) on true
+    ) d
+    where not exists(
+    	select 1 from activity t
+        where t.activityid = d.activityid
+    );
+
+    insert into project(
+    	projectid
+        ,targetdescr
+    )
+    select a.activityid as projectid
+    	,'Описание ' || a.name as targetdescr
+    from activity a
+    where a.activitytypeid = 3
+    	and not exists(
+        	select 1 from project t
+            where t.projectid = a.activityid
+        )
+    ;
+
+
+    insert into activity (
+        activityid
+        ,activitytypeid
+        ,code
+        ,name
+        ,parentid
+    )
+    select d.*
+    from (
+        select row_number() over(order by pj.projectid desc) + lid.last_id as activityid
+            ,4 as activitytypeid
+            ,to_char(500000 + row_number() over(order by pj.projectid), 'FM000-000') as code
+            ,replace(apj.name, 'Проект - ', 'Контракт - ') || '.' || c.id::text as name
+        	,pj.projectid as parentid
+        from project pj
+        join activity apj on apj.activityid = pj.projectid
+        join (select max(aa.activityid) as last_id from activity aa where aa.activitytypeid < 4) lid on true
+        join (
+            values(1),(2),(3),(4)
+        ) c(id) on true
+    ) d
+    where not exists(
+    	select 1 from activity t
+        where t.activityid = d.activityid
+    );
+
+    insert into contract(
+    	contractid
+        ,areaid
+    )
+    select a.activityid as contractid
+    	,nullif(round((random() * 4)::numeric, 0), 0)::int as areaid
+    from activity a
+    where a.activitytypeid = 4
+    	and not exists(
+        	select 1 from contract t
+            where t.contractid = a.activityid
+        )
+    ;
+
+
+    insert into activity (
+        activityid
+        ,activitytypeid
+        ,code
+        ,name
+        ,parentid
+    )
+    select d.*
+    from (
+        select row_number() over(order by random()) + lid.last_id as activityid
+            ,5 as activitytypeid
+            ,to_char(400000 + row_number() over(order by random()), 'FM000-000') as code
+            ,'КТ ' || lower(at.name) || 'а ' || (row_number() over(partition by ap.activityid order by random()))::text as name
+        	,ap.activityid as parentid
+        from activity ap
+        join activitytype at on at.activitytypeid = ap.activitytypeid
+        	and ap.activitytypeid in(3, 4)
+        join (select max(aa.activityid) as last_id from activity aa where aa.activitytypeid < 5) lid on true
+        join (
+            values(1),(2),(3),(4)
+        ) c(id) on true
+    ) d
+    where not exists(
+    	select 1 from activity t
+        where t.activityid = d.activityid
+    );
+
+    insert into point (
+    	pointid
+        ,plandate
+        ,factdate
+    )
+    select a.activityid as pointid
+    	,r.rnd_date as plandate
+        ,case round((random())::numeric, 0)::int when 1 then r.rnd_date + (round((random() * 2)::numeric, 0)::int - 1) end as factdate
+    from activity a
+    left join activity c on c.activityid = a.parentid
+    	and c.activitytypeid = 4
+    join activity pj on pj.activityid = coalesce(c.parentid, a.parentid)
+    	and pj.activitytypeid = 3
+    join (
+    	select apj.activityid
+        	,make_date(pg.yearstart, round((random() * 11)::numeric, 0)::int + 1, round((random() * 23)::numeric, 0)::int + 2)::date as rnd_date
+        from activity apj
+        join activity sp on sp.activityid = apj.parentid
+        	and apj.activitytypeid = 3
+        join program pg on pg.programid = sp.parentid
+    ) r on r.activityid = pj.activityid
+    where a.activitytypeid = 5
+    	and not exists(
+        	select 1 from point t
+            where t.pointid = a.activityid
+        )
+    ;
+
+
+
+
+
+    in_sql := 'set search_path to ' || in_current_search_path || ';';
+    execute in_sql;
+exception when others then
+	raise notice 'test data SQLSTATE: %', sqlstate;
+    raise;
+end
+$testdata$;
+
+
+
+
