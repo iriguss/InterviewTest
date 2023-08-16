@@ -1,1 +1,77 @@
+# Resul Test:
 
+SELECT
+    CASE WHEN tab1.ID_DELIVERY IS NULL THEN 'Total' ELSE TO_CHAR(tab1.ID_DELIVERY) END AS ID_DELIVERY,
+    COALESCE(tab2.num_offline_agents, 0) AS num_offline_agents,
+    COALESCE(tab2.num_sold_agents_offline, 0) AS num_sold_agents_offline,
+    COALESCE(tab2.num_utilized_items_offline, 0) AS num_utilized_items_offline,
+    COALESCE(tab2.num_shipped_items_offline, 0) AS num_shipped_items_offline,
+    COALESCE(tab2.sum_sold_items_offline, 0) AS sum_sold_items_offline,
+    COALESCE(tab3.num_online_agents, 0) AS num_online_agents,
+    COALESCE(tab3.num_sold_agents_online, 0) AS num_sold_agents_online,
+    COALESCE(tab3.sum_sold_items_online, 0) AS sum_sold_items_online,
+    COALESCE(tab3.num_canceled_items_online, 0) AS num_canceled_items_online,
+    COALESCE(tab3.sum_canceled_items_online, 0) AS sum_canceled_items_online
+FROM
+    (SELECT ID_DELIVERY FROM Tab2 UNION SELECT ID_DELIVERY FROM Tab3) tab1
+LEFT JOIN
+    (SELECT
+        ID_DELIVERY,
+        COUNT(DISTINCT ID_AGENT) AS num_offline_agents,
+        COUNT(CASE WHEN IS_AGENT = 'y' THEN ID_TRADE END) AS num_sold_agents_offline,
+        COUNT(CASE WHEN IS_AGENT = 'y' AND IS_UTIL = 'y' THEN ID_TRADE END) AS num_utilized_items_offline,
+        COUNT(CASE WHEN IS_AGENT = 'y' AND IS_UTIL IS NULL THEN ID_TRADE END) AS num_shipped_items_offline,
+        SUM(CASE WHEN IS_AGENT = 'y' THEN AMOUNT END) AS sum_sold_items_offline
+    FROM Tab2
+    WHERE ID_DELIVERY IN (1, 2)
+    GROUP BY ID_DELIVERY) tab2 ON tab1.ID_DELIVERY = tab2.ID_DELIVERY
+LEFT JOIN
+    (SELECT
+        ID_DELIVERY,
+        COUNT(DISTINCT ID_AGENT) AS num_online_agents,
+        COUNT(CASE WHEN ID_TYPE = 1 THEN ID_TRADE END) AS num_sold_agents_online,
+        SUM(CASE WHEN ID_TYPE = 1 THEN AMOUNT END) AS sum_sold_items_online,
+        COUNT(CASE WHEN ID_TYPE = 2 THEN ID_TRADE END) AS num_canceled_items_online,
+        SUM(CASE WHEN ID_TYPE = 2 THEN AMOUNT END) AS sum_canceled_items_online
+    FROM Tab3
+    WHERE ID_DELIVERY IN (1, 2)
+    GROUP BY ID_DELIVERY) tab3 ON tab1.ID_DELIVERY = tab3.ID_DELIVERY
+
+UNION ALL
+
+SELECT
+    'Total',
+    COALESCE(SUM(tab2.num_offline_agents), 0),
+    COALESCE(SUM(tab2.num_sold_agents_offline), 0),
+    COALESCE(SUM(tab2.num_utilized_items_offline), 0),
+    COALESCE(SUM(tab2.num_shipped_items_offline), 0),
+    COALESCE(SUM(tab2.sum_sold_items_offline), 0),
+    COALESCE(SUM(tab3.num_online_agents), 0),
+    COALESCE(SUM(tab3.num_sold_agents_online), 0),
+    COALESCE(SUM(tab3.sum_sold_items_online), 0),
+    COALESCE(SUM(tab3.num_canceled_items_online), 0),
+    COALESCE(SUM(tab3.sum_canceled_items_online), 0)
+FROM
+    (SELECT ID_DELIVERY FROM Tab2 UNION SELECT ID_DELIVERY FROM Tab3) tab1
+LEFT JOIN
+    (SELECT
+        ID_DELIVERY,
+        COUNT(DISTINCT ID_AGENT) AS num_offline_agents,
+        COUNT(CASE WHEN IS_AGENT = 'y' THEN ID_TRADE END) AS num_sold_agents_offline,
+        COUNT(CASE WHEN IS_AGENT = 'y' AND IS_UTIL = 'y' THEN ID_TRADE END) AS num_utilized_items_offline,
+        COUNT(CASE WHEN IS_AGENT = 'y' AND IS_UTIL IS NULL THEN ID_TRADE END) AS num_shipped_items_offline,
+        SUM(CASE WHEN IS_AGENT = 'y' THEN AMOUNT END) AS sum_sold_items_offline
+    FROM Tab2
+    WHERE ID_DELIVERY IN (1, 2)
+    GROUP BY ID_DELIVERY) tab2 ON tab1.ID_DELIVERY = tab2.ID_DELIVERY
+LEFT JOIN
+    (SELECT
+        ID_DELIVERY,
+        COUNT(DISTINCT ID_AGENT) AS num_online_agents,
+        COUNT(CASE WHEN ID_TYPE = 1 THEN ID_TRADE END) AS num_sold_agents_online,
+        SUM(CASE WHEN ID_TYPE = 1 THEN AMOUNT END) AS sum_sold_items_online,
+        COUNT(CASE WHEN ID_TYPE = 2 THEN ID_TRADE END) AS num_canceled_items_online,
+        SUM(CASE WHEN ID_TYPE = 2 THEN AMOUNT END) AS sum_canceled_items_online
+    FROM Tab3
+    WHERE ID_DELIVERY IN (1, 2)
+    GROUP BY ID_DELIVERY) tab3 ON tab1.ID_DELIVERY = tab3.ID_DELIVERY;
